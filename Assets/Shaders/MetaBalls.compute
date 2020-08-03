@@ -1,0 +1,78 @@
+﻿
+
+#pragma kernel CSMain
+
+struct Ball
+{
+    float3 position;
+    float sqrRadius;
+};
+
+float3 _Offset;
+
+float3 _Scale;
+
+StructuredBuffer<Ball> _Balls;
+
+int _Width, _Height, _BallCount;
+
+RWStructuredBuffer<float> _Result;
+
+float ratio(float sqrDist, float sqrRadius)
+{
+    return sqrRadius / sqrDist;
+}
+
+float polynomial(float sqrDist, float sqrRadius)
+{
+    float diff = (sqrRadius - sqrDist);
+    if (diff < 0)
+    {
+        return 0;
+    }
+    
+    return diff * diff;
+}
+
+float evaluateFieldStrength(float3 pos)
+{
+    float n = 0;
+    for (int i = 0; i < _BallCount; i++)
+    {
+        Ball ball = _Balls[i];
+        float3 v = (pos - ball.position);
+        float sqrDist = dot(v, v);
+        
+        // n += polynomial(sqrDist, ball.sqrRadius);
+        n += ratio(sqrDist, ball.sqrRadius);
+    }
+    
+    return n;
+}
+
+[numthreads(8,8,8)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    float3 pos = float3(id);
+    pos *= _Scale;
+    pos += _Offset;
+	float f = evaluateFieldStrength(pos);
+	_Result[id.x + id.y * _Width + id.z * _Width * _Height] = f;
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,131 @@
+
+#pragma kernel CSMain
+
+struct Vert
+{
+	float4 position;
+	float3 normal;
+};
+
+SamplerState _LinearClamp;
+
+float _Target;
+
+float3 _Offset;
+
+float3 _Scale;
+
+int _Width, _Height, _Depth, _Border;
+
+StructuredBuffer<int> _TriangleConnectionTable;
+
+StructuredBuffer<int> _CubeEdgeFlags;
+
+StructuredBuffer<float> _Voxels;
+
+Texture3D<float3> _Normals;
+
+RWStructuredBuffer<Vert> _Buffer;
+
+static int2 edgeConnection[12] =
+{
+	int2(0,1), int2(1,2), int2(2,3), int2(3,0), int2(4,5), int2(5,6), int2(6,7), int2(7,4), int2(0,4), int2(1,5), int2(2,6), int2(3,7)
+};
+
+static float3 edgeDirection[12] =
+{
+	float3(1.0f, 0.0f, 0.0f),float3(0.0f, 1.0f, 0.0f),float3(-1.0f, 0.0f, 0.0f),float3(0.0f, -1.0f, 0.0f),
+	float3(1.0f, 0.0f, 0.0f),float3(0.0f, 1.0f, 0.0f),float3(-1.0f, 0.0f, 0.0f),float3(0.0f, -1.0f, 0.0f),
+	float3(0.0f, 0.0f, 1.0f),float3(0.0f, 0.0f, 1.0f),float3(0.0f, 0.0f, 1.0f),float3(0.0f,  0.0f, 1.0f)
+};
+
+static float3 vertexOffset[8] =
+{
+	float3(0, 0, 0),float3(1, 0, 0),float3(1, 1, 0),float3(0, 1, 0),
+	float3(0, 0, 1),float3(1, 0, 1),float3(1, 1, 1),float3(0, 1, 1)
+};
+
+void FillCube(int x, int y, int z, out float cube[8])
+{
+	cube[0] = _Voxels[x + y * _Width + z * _Width * _Height];
+	cube[1] = _Voxels[(x + 1) + y * _Width + z * _Width * _Height];
+	cube[2] = _Voxels[(x + 1) + (y + 1) * _Width + z * _Width * _Height];
+	cube[3] = _Voxels[x + (y + 1) * _Width + z * _Width * _Height];
+
+	cube[4] = _Voxels[x + y * _Width + (z + 1) * _Width * _Height];
+	cube[5] = _Voxels[(x + 1) + y * _Width + (z + 1) * _Width * _Height];
+	cube[6] = _Voxels[(x + 1) + (y + 1) * _Width + (z + 1) * _Width * _Height];
+	cube[7] = _Voxels[x + (y + 1) * _Width + (z + 1) * _Width * _Height];
+}
+
+float GetOffset(float v1, float v2)
+{
+	float delta = v2 - v1;
+	return (delta == 0.0f) ? 0.5f : (_Target - v1) / delta;
+}
+
+Vert CreateVertex(float3 position, float3 size)
+{
+	Vert vert;
+	vert.position = float4((position * _Scale) + _Offset, 1.0);
+
+	float3 uv = position / size;
+	vert.normal = _Normals.SampleLevel(_LinearClamp, uv, 0);
+
+	return vert;
+}
+
+[numthreads(8, 8, 8)]
+void CSMain(int3 id : SV_DispatchThreadID)
+{
+	if (id.x >= _Width - 1 - _Border) return;
+	if (id.y >= _Height - 1 - _Border) return;
+	if (id.z >= _Depth - 1 - _Border) return;
+
+	float3 pos = float3(id);
+
+	float cube[8];
+	FillCube(id.x, id.y, id.z, cube);
+
+	int i = 0;
+	int flagIndex = 0;
+	float3 edgeVertex[12];
+
+	for (i = 0; i < 8; i++)
+		if (cube[i] <= _Target) flagIndex |= 1 << i;
+
+	int edgeFlags = _CubeEdgeFlags[flagIndex];
+
+	if (edgeFlags == 0) return;
+
+	for (i = 0; i < 12; i++)
+	{
+		if ((edgeFlags & (1 << i)) != 0)
+		{
+			float offset = GetOffset(cube[edgeConnection[i].x], cube[edgeConnection[i].y]);
+
+			edgeVertex[i] = pos + (vertexOffset[edgeConnection[i].x] + offset * edgeDirection[i]);
+		}
+	}
+
+	float3 size = float3(_Width - 1, _Height - 1, _Depth - 1);
+
+	int idx = id.x + id.y * _Width + id.z * _Width * _Height;
+
+	for (i = 0; i < 5; i++)
+	{
+		if (_TriangleConnectionTable[flagIndex * 16 + 3 * i] >= 0)
+		{
+			float3 position;
+
+			position = edgeVertex[_TriangleConnectionTable[flagIndex * 16 + (3 * i + 0)]];
+			_Buffer[idx * 15 + (3 * i + 0)] = CreateVertex(position, size);
+
+			position = edgeVertex[_TriangleConnectionTable[flagIndex * 16 + (3 * i + 1)]];
+			_Buffer[idx * 15 + (3 * i + 1)] = CreateVertex(position, size);
+
+			position = edgeVertex[_TriangleConnectionTable[flagIndex * 16 + (3 * i + 2)]];
+			_Buffer[idx * 15 + (3 * i + 2)] = CreateVertex(position, size);
+		}
+	}
+}

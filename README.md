@@ -1,5 +1,10 @@
 # meta-goo
-a nice little compute shader project for a viscous character controller. developed for a katamari damacy inspired game jam game. the 'blob' is just a bunch of sphere colliders with rigidbody physics. the metaball isosurface is generated using marching cubes on the gpu and then rendered without cpu readbacks.
+
+![such blob](./.github/meta-goo.gif)
+
+a nice little compute shader project for a viscous character controller. developed for a katamari damacy inspired game jam game.
+
+the metaball isosurface is generated using marching cubes on the gpu and then rendered without cpu readbacks. as far as the cpu is concerned the goo is just a bunch of sphere colliders with rigidbody physics. 
 
 ### TODO
 - change physics to DOTS

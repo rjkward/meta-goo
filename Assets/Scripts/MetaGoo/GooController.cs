@@ -37,22 +37,20 @@ namespace MetaGoo
 
         private const int StartCount = 7;
 
-        private float _radius;
-
         private Transform _camera;
 
         private void Awake()
         {
-            _radius = _ballPrefab.GetComponent<SphereCollider>().radius;
             _camera = Camera.main.transform;
         }
 
         private void Start()
         {
-            _centerOfGravity.position = transform.position + new Vector3(0f, _radius, 0f);
+            var radius = _ballPrefab.GetComponent<SphereCollider>().radius;
+            _centerOfGravity.position = transform.position + new Vector3(0f, radius, 0f);
             for (int i = 0; i < StartCount; i++)
             {
-                SpawnBall(_centerOfGravity.position + (i * _radius * 2f * Vector3.up));
+                SpawnBall(_centerOfGravity.position + (i * radius * 2f * Vector3.up));
             }
         }
 
